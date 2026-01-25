@@ -1,0 +1,189 @@
+"""
+중대재해처벌법 데이터 수집 및 전처리
+"""
+import requests
+from bs4 import BeautifulSoup
+import json
+import re
+from typing import List, Dict
+
+class LawDataCollector:
+    """중대재해처벌법 데이터 수집기"""
+    
+    def __init__(self):
+        self.base_url = "https://www.law.go.kr"
+        self.law_data = {
+            "title": "중대재해 처벌 등에 관한 법률",
+            "chapters": [],
+            "articles": []
+        }
+    
+    def fetch_law_content(self) -> str:
+        """법령 페이지에서 내용 가져오기"""
+        url = f"{self.base_url}/법령/중대재해처벌법"
+        
+        # 실제 환경에서는 웹 스크래핑으로 가져오지만, 
+        # 여기서는 샘플 데이터를 생성합니다
+        return self._get_sample_law_data()
+    
+    def _get_sample_law_data(self) -> str:
+        """샘플 법령 데이터 (실제로는 웹에서 가져옴)"""
+        sample_data = """
+제1장 총칙
+
+제1조(목적) 이 법은 사업 또는 사업장, 공중이용시설 및 공중교통수단을 운영하거나 인체에 해로운 원료나 제조물을 취급하면서 안전·보건 조치의무를 위반하여 인명피해를 발생하게 한 사업주, 경영책임자, 공무원 및 법인의 처벌 등을 규정함으로써 중대재해를 예방하고 시민과 종사자의 생명과 신체를 보호함을 목적으로 한다.
+
+제2조(정의) 이 법에서 사용하는 용어의 뜻은 다음과 같다.
+1. "중대산업재해"란 「산업안전보건법」 제2조제1호에 따른 산업재해 중 다음 각 목의 어느 하나에 해당하는 결과를 야기한 재해를 말한다.
+  가. 사망자가 1명 이상 발생
+  나. 동일한 사고로 6개월 이상 치료가 필요한 부상자가 2명 이상 발생
+  다. 동일한 유해요인으로 급성중독 등 대통령령으로 정하는 직업성 질병자가 1년 이내에 3명 이상 발생
+2. "중대시민재해"란 특정 원료 또는 제조물, 공중이용시설 또는 공중교통수단의 설계, 제조, 설치, 관리상의 결함을 원인으로 하여 발생한 재해로서 다음 각 목의 어느 하나에 해당하는 결과를 야기한 재해를 말한다.
+  가. 사망자가 1명 이상 발생
+  나. 동일한 사고로 2개월 이상 치료가 필요한 부상자가 10명 이상 발생
+  다. 동일한 원인으로 3개월 이상 치료가 필요한 질병자가 10명 이상 발생
+
+제2장 중대산업재해
+
+제4조(사업주와 경영책임자등의 안전 및 보건 확보의무)
+① 사업주 또는 경영책임자등은 사업주나 법인 또는 기관이 실질적으로 지배·운영·관리하는 사업 또는 사업장에서 종사자의 안전·보건상 유해 또는 위험을 방지하기 위하여 그 사업 또는 사업장의 특성 및 규모 등을 고려하여 다음 각 호에 따른 조치를 하여야 한다.
+1. 재해예방에 필요한 인력 및 예산 등 안전보건관리체계의 구축 및 그 이행에 관한 조치
+2. 재해 발생 시 재발방지 대책의 수립 및 그 이행에 관한 조치
+3. 중앙행정기관·지방자치단체가 관계 법령에 따라 개선, 시정 등을 명한 사항의 이행에 관한 조치
+4. 안전·보건 관계 법령에 따른 의무이행에 필요한 관리상의 조치
+
+제5조(도급, 용역, 위탁 등 관계에서의 안전 및 보건 확보의무)
+사업주 또는 경영책임자등은 사업주나 법인 또는 기관이 제3자에게 도급, 용역, 위탁 등을 행한 경우에는 제3자의 종사자에 대하여 다음 각 호의 안전 및 보건 확보의무를 진다.
+
+제3장 중대시민재해
+
+제9조(사업주와 경영책임자등의 안전 및 보건 확보의무)
+① 사업주 또는 경영책임자등은 사업주나 법인 또는 기관이 실질적으로 지배·운영·관리하는 공중이용시설 또는 공중교통수단의 이용자 또는 종사자의 안전·보건상 유해 또는 위험을 방지하기 위하여 다음 각 호에 따른 조치를 하여야 한다.
+
+제4장 처벌 등
+
+제6조(사업주와 경영책임자등의 처벌)
+① 제4조 또는 제5조를 위반하여 제2조제2호가목의 중대산업재해에 이르게 한 사업주 또는 경영책임자등은 1년 이상의 징역 또는 10억원 이하의 벌금에 처한다.
+② 제4조 또는 제5조를 위반하여 제2조제2호나목 또는 다목의 중대산업재해에 이르게 한 사업주 또는 경영책임자등은 7년 이하의 징역 또는 1억원 이하의 벌금에 처한다.
+
+제10조(사업주와 경영책임자등의 처벌)
+제9조를 위반하여 중대시민재해에 이르게 한 사업주 또는 경영책임자등은 1년 이상의 징역 또는 10억원 이하의 벌금에 처한다.
+
+제5장 보칙
+
+제13조(양벌규정)
+법인 또는 기관의 경영책임자등이 그 법인 또는 기관의 업무에 관하여 제6조, 제10조 또는 제11조의 위반행위를 하면 그 행위자를 벌하는 외에 그 법인 또는 기관에게도 해당 조문의 벌금형을 과한다. 다만, 법인 또는 기관이 그 위반행위를 방지하기 위하여 해당 업무에 관하여 상당한 주의와 감독을 게을리하지 아니한 경우에는 그러하지 아니하다.
+"""
+        return sample_data
+    
+    def parse_law_structure(self, content: str) -> Dict:
+        """법령 구조 파싱"""
+        lines = content.strip().split('\n')
+        current_chapter = None
+        current_article = None
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # 장 파싱
+            if line.startswith('제') and '장' in line:
+                current_chapter = {
+                    "chapter_name": line,
+                    "articles": []
+                }
+                self.law_data["chapters"].append(current_chapter)
+            
+            # 조 파싱
+            elif line.startswith('제') and '조' in line:
+                article_match = re.match(r'제(\d+)조\(([^)]+)\)', line)
+                if article_match:
+                    article_num = article_match.group(1)
+                    article_title = article_match.group(2)
+                    current_article = {
+                        "article_num": article_num,
+                        "article_title": article_title,
+                        "content": line,
+                        "paragraphs": []
+                    }
+                    if current_chapter:
+                        current_chapter["articles"].append(current_article)
+                    self.law_data["articles"].append(current_article)
+            
+            # 항 및 내용 파싱
+            elif current_article and line:
+                current_article["paragraphs"].append(line)
+        
+        return self.law_data
+    
+    def create_qa_dataset(self) -> List[Dict]:
+        """QA 데이터셋 생성"""
+        qa_pairs = []
+        
+        # 법 목적 관련 QA
+        qa_pairs.extend([
+            {
+                "instruction": "중대재해처벌법의 목적은 무엇인가요?",
+                "input": "",
+                "output": "중대재해처벌법은 사업 또는 사업장, 공중이용시설 및 공중교통수단 운영, 인체에 해로운 원료나 제조물 취급 시 안전·보건 조치의무를 위반하여 인명피해를 발생시킨 사업주, 경영책임자, 공무원 및 법인을 처벌함으로써 중대재해를 예방하고 시민과 종사자의 생명과 신체를 보호하는 것을 목적으로 합니다."
+            },
+            {
+                "instruction": "중대산업재해의 정의는 무엇인가요?",
+                "input": "",
+                "output": "중대산업재해는 산업재해 중 1) 사망자가 1명 이상 발생, 2) 동일한 사고로 6개월 이상 치료가 필요한 부상자가 2명 이상 발생, 3) 동일한 유해요인으로 급성중독 등 직업성 질병자가 1년 이내에 3명 이상 발생한 경우를 말합니다."
+            },
+            {
+                "instruction": "경영책임자의 안전보건 확보 의무에는 어떤 것들이 있나요?",
+                "input": "",
+                "output": "경영책임자는 1) 재해예방에 필요한 인력 및 예산 등 안전보건관리체계의 구축 및 이행, 2) 재해 발생 시 재발방지 대책의 수립 및 이행, 3) 중앙행정기관·지방자치단체가 명한 개선·시정 사항의 이행, 4) 안전·보건 관계 법령에 따른 의무이행에 필요한 관리상의 조치를 해야 합니다."
+            },
+            {
+                "instruction": "중대산업재해 발생 시 처벌은 어떻게 되나요?",
+                "input": "",
+                "output": "사망자가 1명 이상 발생한 경우 사업주 또는 경영책임자는 1년 이상의 징역 또는 10억원 이하의 벌금에 처해집니다. 6개월 이상 치료가 필요한 부상자 2명 이상 발생 또는 직업성 질병자 3명 이상 발생 시에는 7년 이하의 징역 또는 1억원 이하의 벌금에 처해집니다."
+            },
+            {
+                "instruction": "중대시민재해란 무엇인가요?",
+                "input": "",
+                "output": "중대시민재해는 특정 원료 또는 제조물, 공중이용시설 또는 공중교통수단의 설계, 제조, 설치, 관리상의 결함으로 발생한 재해로서 1) 사망자 1명 이상, 2) 동일 사고로 2개월 이상 치료 필요 부상자 10명 이상, 3) 동일 원인으로 3개월 이상 치료 필요 질병자 10명 이상 발생한 경우를 말합니다."
+            },
+            {
+                "instruction": "도급, 용역 관계에서도 안전보건 확보 의무가 있나요?",
+                "input": "",
+                "output": "네, 사업주 또는 경영책임자는 제3자에게 도급, 용역, 위탁 등을 행한 경우에도 제3자의 종사자에 대하여 안전 및 보건 확보의무를 집니다."
+            },
+            {
+                "instruction": "양벌규정이란 무엇인가요?",
+                "input": "",
+                "output": "법인 또는 기관의 경영책임자가 업무와 관련하여 위반행위를 하면 행위자를 벌하는 외에 법인 또는 기관에게도 벌금형을 과합니다. 단, 법인이 위반행위 방지를 위해 상당한 주의와 감독을 게을리하지 않은 경우는 예외입니다."
+            }
+        ])
+        
+        return qa_pairs
+    
+    def save_data(self, filename: str = "law_data.json"):
+        """데이터 저장"""
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(self.law_data, f, ensure_ascii=False, indent=2)
+        print(f"법령 데이터 저장 완료: {filename}")
+    
+    def save_qa_dataset(self, qa_pairs: List[Dict], filename: str = "qa_dataset.json"):
+        """QA 데이터셋 저장"""
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(qa_pairs, f, ensure_ascii=False, indent=2)
+        print(f"QA 데이터셋 저장 완료: {filename}")
+
+if __name__ == "__main__":
+    collector = LawDataCollector()
+    
+    # 법령 데이터 수집 및 파싱
+    content = collector.fetch_law_content()
+    law_data = collector.parse_law_structure(content)
+    collector.save_data("law_data.json")
+    
+    # QA 데이터셋 생성
+    qa_pairs = collector.create_qa_dataset()
+    collector.save_qa_dataset(qa_pairs, "qa_dataset.json")
+    
+    print(f"총 {len(qa_pairs)}개의 QA 쌍 생성 완료")

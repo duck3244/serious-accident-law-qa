@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  law-qa-system:
+    build: .
+    container_name: serious-accident-law-qa
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./law_data.json:/app/law_data.json
+      - ./qa_dataset.json:/app/qa_dataset.json
+      - ./chroma_db:/app/chroma_db
+      - ./finetuned_model:/app/finetuned_model
+    environment:
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped

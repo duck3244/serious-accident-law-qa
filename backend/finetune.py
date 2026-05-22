@@ -31,17 +31,21 @@ class LawQAFineTuner:
     ):
         self.model_name = model_name
         self.output_dir = output_dir
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        
+        self.use_cuda = torch.cuda.is_available()
+        self.device = "cuda" if self.use_cuda else "cpu"
+
         print(f"사용 디바이스: {self.device}")
-        
-        # 4-bit quantization 설정 (메모리 효율성)
+        if not self.use_cuda:
+            print("⚠️  GPU가 감지되지 않았습니다. 4-bit 양자화 학습은 CUDA가 필요하므로 "
+                  "CPU에서는 fine-tuning을 권장하지 않습니다(매우 느리거나 실패할 수 있음).")
+
+        # 4-bit quantization 설정 (메모리 효율성) — CUDA 환경에서만 사용
         self.bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.float16,
             bnb_4bit_use_double_quant=True,
-        )
+        ) if self.use_cuda else None
         
     def load_model_and_tokenizer(self):
         """모델 및 토크나이저 로드"""
@@ -58,16 +62,17 @@ class LawQAFineTuner:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         
-        # 모델 로드 (4-bit quantization)
+        # 모델 로드 (CUDA 환경에서는 4-bit quantization 적용)
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=self.bnb_config,
-            device_map="auto",
+            device_map="auto" if self.use_cuda else None,
             trust_remote_code=True
         )
-        
-        # k-bit training 준비
-        self.model = prepare_model_for_kbit_training(self.model)
+
+        # k-bit training 준비 (양자화 모델에 한함)
+        if self.use_cuda:
+            self.model = prepare_model_for_kbit_training(self.model)
         
         print("모델 로딩 완료!")
         
@@ -150,15 +155,16 @@ class LawQAFineTuner:
             per_device_eval_batch_size=2,
             gradient_accumulation_steps=4,
             learning_rate=2e-4,
-            fp16=True,
+            fp16=self.use_cuda,  # fp16은 CUDA 전용
             save_strategy="epoch",
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",  # transformers 4.41+ 명칭 (구 evaluation_strategy)
             logging_steps=10,
             warmup_steps=50,
             save_total_limit=2,
             load_best_model_at_end=True,
             report_to="none",
-            optim="paged_adamw_8bit",
+            # paged_adamw_8bit은 bitsandbytes(CUDA) 필요 → CPU는 표준 옵티마이저 사용
+            optim="paged_adamw_8bit" if self.use_cuda else "adamw_torch",
         )
         
         # Data Collator

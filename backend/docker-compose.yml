@@ -5,7 +5,7 @@ services:
     build: .
     container_name: serious-accident-law-qa
     ports:
-      - "7860:7860"
+      - "8000:8000"
     volumes:
       - ./law_data.json:/app/law_data.json
       - ./qa_dataset.json:/app/qa_dataset.json

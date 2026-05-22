@@ -4,11 +4,14 @@ RAG (Retrieval-Augmented Generation) 시스템
 """
 import os
 import json
-from typing import List, Dict, Tuple
-import numpy as np
+import logging
+from typing import List, Dict
 from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
+
+# chromadb 0.5.x 텔레메트리(posthog) 버전 충돌로 발생하는 콘솔 에러 노이즈 억제
+logging.getLogger("chromadb.telemetry").setLevel(logging.CRITICAL)
 
 class LawRAGSystem:
     """중대재해처벌법 RAG 시스템"""
@@ -30,26 +33,29 @@ class LawRAGSystem:
         print(f"임베딩 모델 로드 완료: {embedding_model}")
         
         # ChromaDB 클라이언트 초기화
-        self.chroma_client = chromadb.Client(Settings(
-            persist_directory=persist_directory,
-            anonymized_telemetry=False
-        ))
-        
-        # 컬렉션 생성/로드
-        try:
-            self.collection = self.chroma_client.get_collection("law_articles")
-            print("기존 컬렉션 로드 완료")
-        except:
-            self.collection = self.chroma_client.create_collection(
-                name="law_articles",
-                metadata={"description": "중대재해처벌법 조문"}
-            )
-            print("새 컬렉션 생성 완료")
+        # PersistentClient를 써야 persist_directory에 실제로 디스크 영속화됨
+        # (chromadb.Client는 in-memory 전용이라 재시작 시 인덱스가 사라짐)
+        self.chroma_client = chromadb.PersistentClient(
+            path=persist_directory,
+            settings=Settings(anonymized_telemetry=False)
+        )
+
+        # 컬렉션 생성/로드 (있으면 로드, 없으면 생성)
+        self.collection = self.chroma_client.get_or_create_collection(
+            name="law_articles",
+            metadata={"description": "중대재해처벌법 조문"}
+        )
+        print(f"컬렉션 준비 완료 (기존 인덱싱 문서: {self.collection.count()}개)")
     
     def load_and_index_law(self, law_file: str = "law_data.json"):
         """법령 데이터 로드 및 인덱싱"""
+        # 이미 인덱싱된 경우 중복 add 방지 (PersistentClient는 재실행 시 데이터가 남아있음)
+        if self.collection.count() > 0:
+            print(f"이미 {self.collection.count()}개 조문이 인덱싱되어 있어 건너뜁니다.")
+            return
+
         print(f"법령 데이터 인덱싱: {law_file}")
-        
+
         with open(law_file, 'r', encoding='utf-8') as f:
             law_data = json.load(f)
         

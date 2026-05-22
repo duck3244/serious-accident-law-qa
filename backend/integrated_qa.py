@@ -50,8 +50,8 @@ class IntegratedQASystem:
                 )
                 self.model = PeftModel.from_pretrained(base, finetuned_model_path)
                 print("Fine-tuned 모델 로드 완료!")
-            except:
-                print("Fine-tuned 모델을 찾을 수 없어 기본 모델 사용")
+            except Exception as e:
+                print(f"Fine-tuned 모델 로드 실패 ({type(e).__name__}: {e}). 기본 모델을 사용합니다.")
                 self.model = AutoModelForCausalLM.from_pretrained(
                     base_model,
                     torch_dtype=torch.float16,

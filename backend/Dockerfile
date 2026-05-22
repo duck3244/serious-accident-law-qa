@@ -14,8 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 프로젝트 파일 복사
 COPY . .
 
-# 포트 노출
-EXPOSE 7860
+# FastAPI 포트 노출
+EXPOSE 8000
 
-# 실행 명령
-CMD ["python", "app.py"]
+# 실행 명령 — FastAPI 백엔드 (uvicorn)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
